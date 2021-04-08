@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+
+<head>
+	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+	<meta http-equiv="X-UA-Compatible" content="IE=edge">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+
+	<title>Bats Fact Wheel</title>
+
+	<!-- Styling -->
+	<link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+	<!-- Google fonts -->
+	<link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:ital,wght@0,300;0,400;0,700;1,300;1,400;1,700&display=swap" rel="stylesheet">
+
+	<style>
+		body {
+			font-weight: 400;
+			font-size: 16px;
+			margin-top: 0px;
+			margin-left: auto;
+			margin-right: auto;
+			font-family: 'Roboto', sans-serif;
+		}
+		#chart-container {
+			text-align: center;
+			margin-left: auto;
+			margin-right: auto;
+			position: relative;
+			padding-top: 30px;
+			padding-bottom: 40px;
+		}
+		.familyText{
+			font-family: 'Roboto Condensed', sans-serif;
+			font-size:14px;
+		}
+
+		.familyNumText{
+			font-family: 'Roboto', sans-serif;
+			font-size:16px;
+		}
+
+		#wrapper{
+			-webkit-transition: transform 1s ease-in-out;
+  			transition: transform 1s ease-in-out;
+		}
+
+		#advance{
+			margin-left: auto;
+			margin-right: auto;
+			text-align: center;
+			display:block;
+			margin-top: 50px;
+			z-index:2
+		}
+
+		svg#svg2{
+			position:absolute;
+			top: 350px;
+			left:500px;
+		}
+
+		.tooltip {
+			position: absolute;
+			top: 100px;
+			left: 100px;
+			-moz-border-radius:5px;
+			border-radius: 5px;
+			/* border: 2px solid #000; */
+			background: #fff;
+			opacity: .9;
+			color: black;
+			padding: 10px;
+			font-size: 12px;
+			z-index: 10;
+		}
+		.species{
+			color:white;
+		}
+
+	</style>
+</head>
+
+<body>
+	<div class="row">
+		<div class="col-md-4"></div>
+		<div class="col-md-4">
+			<button id="advance" type="button" class="btn btn-info">Next Bat Family</button>
+		</div>
+		<div class="col-md-4"></div>
+	</div>
+	<div class="row">
+		<div class="col-md-1"></div>
+		<div class="col-md-10">
+			<div id="chart-container">
+				<div id="viz"></div>
+			</div>
+		</div>
+		<div class="col-md-1"></div>
+	</div>
+	
+
+	<!-- JavaScript plugin files -->
+	<script src="js/d3.min.js"></script>
+	<script src="./js/tooltip.js"></script>
+	<script src="./data/bat_families.js"></script>
+	<script src="./data/bat_hierarchy.js"></script>
+	<script src="./data/bat_species.js"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/d3-annotation/1.12.1/d3-annotation.min.js"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/lodash.js/4.17.21/lodash.min.js"></script>
+	<script src="https://code.jquery.com/jquery-3.6.0.min.js" integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
+	<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+
+
+	<script>		
+
+		const container = d3.select("#viz");
+		const width = 1100;
+		const height = width;
+
+		//SVG container
+		const svg = container.append("svg")
+			.attr("id", "svg")
+			.attr("width", width)
+			.attr("height", height);
+
+		//to place the center text so it doesn't rotate
+		const svg2 = container.append("svg")
+			.attr("id", "svg2")
+			.attr("width", 400)
+			.attr("height", 400);
+
+		const g = svg.append("g").attr("transform", `translate(${width/2}, ${height/2-100})`);
+
+		const chart = g.append("g").attr("id", "wrapper");
+
+		const colorScale = d3.scaleOrdinal().domain(["threatened", "data deficient", "not threatened"]).range(["#eba6c9", "#939393", "#7fccc8"]);
+		const radius_scale = d3.scaleSqrt().domain([0, 115]).range([0, 30]);
+
+		const bat_genera = width * 0.29,
+			bat_family_arc_in = width * 0.217,
+			bat_family_arc_out = width * 0.36,
+			rad_species = width * 0.32,
+			rad_donut_inner = width * 0.122,
+			rad_donut_outer = width * 0.13;
+
+
+		let currentIndex = 0;
+		let currentData;
+		let increment = 18;
+
+		const tooltip = floatingTooltip('gates_tooltip', 240);
+
+		const pi2 = 2 * Math.PI,
+			pi1_2 = Math.PI / 2;
+
+		let simulation;
+
+		const legendData = [{"status":"threatened","color":"#eba6c9"},{"status":"data deficient","color":"#939393"},{"status":"not threatened","color":"#7fccc8"}];
+		console.log(bat_families)
+			//set current data before advance
+			currentData = bat_families[currentIndex];
+
+			//prepare svg2 groups 
+			const titleGroup = svg2.append("g").attr("class", "title-group")
+			const textGroup = svg2.append("g").attr("class", "text-group")
+			const legendGroup = svg2.append("g").attr("class", "legend-group")
+			const instructionGroup = svg2.append("g").attr("class", "instruction-group")
+			// .attr("transform",`translate(${-width/2+400},${-height/4+100})`)
+
+			titleGroup
+				.append("text")
+				.attr("id", "title")
+				.attr("x", 0)
+				.attr("y", -50)
+				.attr("dy", 10)
+				.style("font-weight",700)
+				.text(currentData.common_name)
+				.call(wrap, 400);
+
+			textGroup
+				.append("text")
+				.attr("id", "info")
+				.attr("x", 0)
+				.attr("y", 0)
+				.attr("dy", 10)
+				.text(currentData.info)
+				.call(wrap, 400);
+
+			legendGroup
+				.selectAll("circle.legend")
+				.data(legendData)
+				.enter().append("circle")
+				.attr("class","legend")
+				.attr("cx", (d,i)=> 30+i*120)
+				.attr("cy",40)
+				.attr("r",10)
+				.attr("fill",d=>d.color);
+			
+			legendGroup
+				.selectAll("text.legend")
+				.data(legendData)
+				.enter().append("text")
+				.attr("class","legend")
+				.attr("x", (d,i)=> 45+i*120)
+				.attr("y",45)
+				.style("font-size",14)
+				.attr("fill","black")
+				.text(d=>d.status);
+
+			instructionGroup
+				.append("text")
+				.attr("id", "title")
+				.attr("dx", 40)
+				.attr("y", -146)
+				.attr("dy", 10)
+				.style("font-weight",400)
+				.attr("fill","#7a7a7a")
+				.text("Hover over the species circles to see more info")
+				.call(wrap, 400);
+
+			$('#advance').on('click', function() {
+				if (currentIndex < 19) {
+					currentIndex++;
+				} else {
+					currentIndex = 0;
+				}
+				currentData = bat_families[currentIndex];
+				textGroup.select("text#info")
+					.text(currentData.info)
+					.call(wrap, 400);
+				
+				titleGroup.select("text#title")
+					.text(currentData.common_name)
+					.call(wrap, 400);
+
+				family_name_group
+					.selectAll(".familyText textPath")
+					.style("font-weight", d => (d.id == currentData.family) ? 700 : 400);
+
+				circle_group.selectAll("circle.circle")
+					.transition().duration(500)
+					.attr("r", d => (d.family == currentData.family) ? d.radius * 1.4 : d.radius * 1.1);
+
+				d3.select("#wrapper").attr("transform", `rotate(${increment})`);
+				increment = increment + 18;
+
+
+			})
+
+			const root = d3.stratify()
+				.id(function(d) {
+					return d.name;
+				})
+				.parentId(function(d) {
+					return d.parent;
+				})
+				(bat_hierarchy);
+
+			const cluster = d3.cluster()
+				.size([360, rad_species]);
+
+			cluster(root);
+
+			const family_location_data = root.leaves()
+
+			family_location_data.forEach(function(d, i) {
+				d.species = d.data.species;
+				d.familyID = (i + 1);
+				d.centerAngle = (d.x + 7.5) * Math.PI / 180; //basically centerAngle is just x converted from 360 to radians
+			}); 
+
+			const family_angle_distance = family_location_data[1].centerAngle - family_location_data[0].centerAngle;
+
+			family_location_data.forEach(function(d, i) {
+				d.startAngle = d.centerAngle - family_angle_distance / 2;
+				d.endAngle = d.centerAngle + family_angle_distance / 2;
+				d.startAngle2 = d.centerAngle - family_angle_distance / 2 + family_angle_distance / 12;
+				d.endAngle2 = d.centerAngle + family_angle_distance / 2 - family_angle_distance / 12;
+			})
+
+			bat_species.forEach(function(d, i) {
+
+				d.cluster = (d.famID - 1);
+				d.radius = 2;
+				d.focusX = bat_genera * Math.cos(family_location_data[d.cluster].centerAngle - pi1_2); 
+				
+				d.focusY = bat_genera * Math.sin(family_location_data[d.cluster].centerAngle - pi1_2);
+				d.x = d.focusX
+				d.y = d.focusY
+			}) //forEach
+
+
+			simulation = d3.forceSimulation(bat_species)
+				.force("x", d3.forceX().x(function(d) {
+					return d.x;
+				}).strength(0.05))
+				.force("y", d3.forceY().y(function(d) {
+					return d.y;
+				}).strength(0.05))
+				.force("collide", d3.forceCollide(function(d) {
+					return (d.radius + 1.5)
+				}).strength(1)) 
+				.on("tick", tick)
+
+			function tick() {
+				circles
+					.attr("cx", function(d) {
+						return d.x;
+					})
+					.attr("cy", function(d) {
+						return d.y;
+					})
+			} //function tick
+
+
+			const family_name_group = chart.append("g").attr("class", "family-name-group").attr("id", "familyNameG");
+
+			//Code from Nadieh Bremer
+			const family_slice = family_name_group.selectAll(".familyArc")
+				.data(family_location_data)
+				.enter().append("path")
+				.attr("class", "familyArc")
+				.attr("id", function(d, i) {
+					return "family_" + i
+				})
+				.style("stroke", "#c4c4c4")
+				.style("stroke-width", "0px")
+				.style("fill", "none")
+				.attr("d", function(d, i) {
+					var rad = bat_family_arc_out,
+						xs = rad * Math.cos(d.startAngle2 - pi1_2),
+						ys = rad * Math.sin(d.startAngle2 - pi1_2),
+						xt = rad * Math.cos(d.endAngle2 - pi1_2),
+						yt = rad * Math.sin(d.endAngle2 - pi1_2)
+					return "M" + xs + "," + ys + " A" + rad + "," + rad + " 0 0 1 " + xt + "," + yt;
+				});
+
+			const family_num_group = chart.append("g").attr("class", "family-num-group").attr("id", "familyNumG");
+
+			const family_num_slice = family_num_group.selectAll(".familyNumArc")
+				.data(family_location_data)
+				.enter().append("path")
+				.attr("class", "familyNumArc")
+				.attr("id", function(d, i) {
+					return "familyNum_" + i
+				})
+				.style("stroke", "#c4c4c4")
+				.style("stroke-width", "1px")
+				.style("fill", "none")
+				.attr("d", function(d, i) {
+					const rad = bat_family_arc_in,
+						xs = rad * Math.cos(d.startAngle2 - pi1_2),
+						ys = rad * Math.sin(d.startAngle2 - pi1_2),
+						xt = rad * Math.cos(d.endAngle2 - pi1_2),
+						yt = rad * Math.sin(d.endAngle2 - pi1_2)
+					return "M" + xs + "," + ys + " A" + rad + "," + rad + " 0 0 1 " + xt + "," + yt;
+				});
+
+
+			family_name_group.selectAll(".familyText")
+				.data(family_location_data)
+				.enter().append("text")
+				.attr("class", "familyText")
+				.append("textPath")
+				.attr("startOffset", "50%")
+				.style("text-anchor", "middle")
+				.style("font-weight", d => (d.id == currentData.family) ? 700 : 400)
+				.attr("xlink:href", (d,i)=> "#family_" + i)
+				.text(d=>d.id);
+
+
+			family_num_group.selectAll(".familyNumText")
+				.data(family_location_data)
+				.enter().append("text")
+				.attr("class", "familyNumText")
+				.append("textPath")
+				.attr("startOffset", "50%")
+				.style("text-anchor", "middle")
+				.attr("xlink:href", (d,i)=>"#familyNum_" + i)
+				.text(d=>`${d.species} spp`);
+
+
+			const circle_group = chart.append("g").attr("class", "circle-group").attr("id", "circleG");
+			const circles = circle_group.selectAll(".circle")
+				.data(bat_species)
+				.enter().append("circle")
+				.attr("class", "circle")
+				.attr("cx", d => d.x)
+				.attr("cy", d => d.y)
+				.attr("r", d => (d.family == currentData.family) ? d.radius * 1.4 : d.radius * 1.1)
+				.style("fill", d => colorScale(d.status));
+
+			circles.on('mouseover', showDetail)
+            	.on('mouseout', hideDetail);
+				
+	    //Code from Mike Bostock
+		function wrap(text, width) {
+			text.each(function() {
+				let text = d3.select(this),
+					words = text.text().split(/\s+/).reverse(),
+					word,
+					line = [],
+					lineNumber = 0,
+					lineHeight = 1.1, 
+					y = text.attr("y"),
+					dy = parseFloat(text.attr("dy")),
+					tspan = text.text(null).append("tspan").attr("x", 0).attr("y", y).attr("dy", dy + "em");
+				while (word = words.pop()) {
+					line.push(word);
+					tspan.text(line.join(" "));
+					if (tspan.node().getComputedTextLength() > width) {
+						line.pop();
+						tspan.text(line.join(" "));
+						line = [word];
+						tspan = text.append("tspan").attr("x", 0).attr("y", y).attr("dy", ++lineNumber * lineHeight + dy + "em").text(word);
+					}
+				}
+			});
+		}
+
+		function showDetail(d) {
+        // change outline to indicate hover state.
+        d3.select(this)
+            .attr("stroke","black")
+            .attr("stroke-width","1px")
+            .style("cursor", "pointer");
+
+        var content = '<span class="species"><b><i>' + d.scientificName + '</i></b></span><br/><br/>' +
+            '<span class="family"><b>Family: </b></span>' +
+            d.family +'<br/>' +
+            '<span class="name"><b>IUCN Status: </b></span><span class="value">' +
+            d.redlistCategory +
+            '</span><br/>';
+
+                d3.selectAll('.tooltip').style('background-image', '-webkit-linear-gradient(top,' + colorScale(d.status) + ', ' + colorScale(d.status) + ' 30%, transparent 30%, transparent 100%)');
+                d3.selectAll('.tooltip').style('background-image', 'linear-gradient(top,' + colorScale(d.status) + ', ' + colorScale(d.status) + ' 30%, transparent 30%, transparent 100%)');
+              
+        tooltip.showTooltip(content, d3.event);
+    }
+
+	function hideDetail(d) {
+        // reset outline
+        d3.selectAll("circle.circle")
+			.attr("stroke","none")
+            .attr("stroke-width","0px");
+
+        tooltip.hideTooltip();
+    }
+
+    </script>
+
+
+</body>
+
+</html>
